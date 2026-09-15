@@ -38,6 +38,7 @@ class LineStyle;
 class ObjectInputStream;
 class ObjectOutputStream;
 class XojFont;
+class Stroke;
 
 class EditSelectionContents: public ElementContainer, public Serializable {
 public:
@@ -82,6 +83,13 @@ public:
      * (Or nullptr if nothing done, e.g. because there is only an image)
      */
     UndoActionPtr setFill(int alphaPen, int alphaHighligther);
+
+public:
+    /**
+     * Creates an undo action for a single geometry vertex edit.
+     * The stroke is already updated live; oldPoints is the state before dragging.
+     */
+    UndoActionPtr createVertexEditUndo(Stroke* stroke, std::vector<Point> oldPoints);
 
 public:
     /**
