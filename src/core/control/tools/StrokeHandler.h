@@ -88,6 +88,9 @@ protected:
     /// Finalizes the stroke using the provided pressure as last point
     void finalizeStroke(double pressure);
 
+    /// Converts a nearly straight stroke to a two-point line when the user pauses before lifting the pen.
+    bool convertPausedStrokeToLine();
+
 protected:
     Point buttonDownPoint;  // used for tapSelect and filtering - never snapped to grid.
     SnapToGridInputHandler snappingHandler;
@@ -102,7 +105,13 @@ private:
 
     std::shared_ptr<xoj::util::DispatchPool<xoj::view::StrokeToolView>> viewPool;
 
+    // Timestamp of the most recent motion event, in milliseconds.
+    guint32 lastMotionTimestamp = 0;
+
     friend class StrokeStabilizer::Active;
 
     static constexpr double MAX_WIDTH_VARIATION = 0.3;
+    static constexpr guint32 PAUSE_TO_LINE_MS = 450;
+    static constexpr double PAUSE_TO_LINE_MIN_LENGTH = 15.0;
+    static constexpr double PAUSE_TO_LINE_MAX_DEVIATION = 0.035;
 };
