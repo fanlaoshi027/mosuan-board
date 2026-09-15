@@ -1,7 +1,6 @@
 // ** THIS FILE IS GENERATED **
 // ** use generateConvert.php to update this file **
 
-
 #pragma once
 
 constexpr const char* ACTION_NAMES[] = {  // Action to string conversion map
@@ -104,6 +103,7 @@ constexpr const char* ACTION_NAMES[] = {  // Action to string conversion map
         "tool-fill-opacity",
         "tool-color",
         "select-color",
+        "favorite-pen",
         "layer-show-all",
         "layer-hide-all",
         "layer-new-above-current",
