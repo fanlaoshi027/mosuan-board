@@ -1,9 +1,7 @@
 /*
- * Backup before modifying
+ * Xournal++
  *
- *  Try running Xournal++ like this:    GTK_DEBUG=interactive  xournalpp
- *
- *  See: https://wiki.gnome.org/action/show/Projects/GTK/Inspector
+ * 墨写 UI overrides
  */
 
 #pdfFloatingToolGrid {
@@ -12,36 +10,32 @@
 
 #floatingToolbox > box,
 #pdfFloatingToolGrid {
-	background-color: white;
-	border-radius: 12px;
-	box-shadow: 0px 0px 3px rgba(0, 0, 0, 0.4);
-	margin: 7px;
+    background-color: #292a2d;
+    border-radius: 14px;
+    box-shadow: none;
+    margin: 7px;
 }
 
 #floatingToolbox box toolbar {
-	background-color: rgba(255, 255, 255, 0);
+    background-color: transparent;
 }
 
-#floatingToolbox button {
-	background-color: rgba(255, 255, 255, 0.8);
-	border-radius: 12px;
-}
-
+#floatingToolbox button,
 #pdfFloatingToolGrid button {
-	background: rgba(255, 255, 255, 0.8);
-	border: 12px;
+    background-color: transparent;
+    border: 1px solid transparent;
+    border-radius: 10px;
 }
 
-#pdfFloatingToolGrid button:hover {
-	border-radius: 12px;
-	background: rgba(245, 245, 245, 0.8);
-	box-shadow: inset 0px 0px 2px gray;
+#pdfFloatingToolGrid button:hover,
+#floatingToolbox button:hover {
+    background-color: #3a3b3f;
 }
 
 #floatingToolbox button:checked {
-	border-color: lightblue;
-	box-shadow: inset 0px 0px 3px lightblue;
-	transition: background-color 0.5s ease, border-color 0.5s ease, margin 0.3s ease;
+    background-color: #505157;
+    border-color: #62646b;
+    box-shadow: none;
 }
 
 #floatingToolbox toolbar,
@@ -51,70 +45,70 @@
 
 window.darkMode #floatingToolbox button,
 window.darkMode #pdfFloatingToolGrid button {
-	background: rgba(55, 53, 53, 0.5);
-	border: none;
+    background: transparent;
+    border: 1px solid transparent;
 }
 
 window.darkMode #floatingToolbox button:checked {
-	background: rgba(85, 85, 95, 0.1);
-	border-color: lightblue;
-	box-shadow: 0px 0px 3px lightblue;
+    background: #505157;
+    border-color: #62646b;
+    box-shadow: none;
 }
 
 window.darkMode #floatingToolbox > box,
-window.darkMode #pdfFloatingToolGrid  {
-	background-color: black;
-	box-shadow: 0px 0px 5px rgba(90, 90, 90, 0.7);
+window.darkMode #pdfFloatingToolGrid {
+    background-color: #202124;
+    box-shadow: none;
 }
 
 toolbar.editing {
-	padding-top: 4px;
-	padding-bottom: 4px;
-	border: 4px dashed orange;
-	border-radius: 3px;
-	box-shadow: inset -2px -2px 8px orange;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    border: 4px dashed orange;
+    border-radius: 3px;
+    box-shadow: inset -2px -2px 8px orange;
 }
 
 toolitem > box > label+label+button {
-	border-width:0;
-	box-shadow:none;
-	background-image:none;
+    border-width: 0;
+    box-shadow: none;
+    background-image: none;
 }
 
 toolbar button,
 popover.toolbar button {
-  padding:3px;
+    padding: 3px;
 }
 
 .orientationFormatBox > button > widget > box > image {
-	margin-left: 3px;
-	margin-right: 3px;
+    margin-left: 3px;
+    margin-right: 3px;
 }
 
 toolbar button:not(:checked):not(:active):not(:hover),
-popover.toolbar button:not(:checked):not(:active):not(:hover){
-  border-color:transparent;
-  box-shadow:none;
-  background-color:transparent;
-  background-image:none;
+popover.toolbar button:not(:checked):not(:active):not(:hover) {
+    border-color: transparent;
+    box-shadow: none;
+    background-color: transparent;
+    background-image: none;
 }
 
 radiobutton.invisible radio {
-  color:transparent;
-  background-color:transparent;
-  background-image:none;
-  outline-style:none;
-  border-style:none;
-  box-shadow:none;
+    color: transparent;
+    background-color: transparent;
+    background-image: none;
+    outline-style: none;
+    border-style: none;
+    box-shadow: none;
 }
 
 separator.spacer {
-  color:transparent;
-  background-color:transparent;
-  background-image:none;
-  outline-style:none;
-  border-style:none;
-  box-shadow:none;
+    color: transparent;
+    background-color: transparent;
+    background-image: none;
+    outline-style: none;
+    border-style: none;
+    box-shadow: none;
 }
 
 notebook frame>label {
@@ -144,12 +138,13 @@ label.setting-touch-indicator {
     margin: 1px;
     padding: 10px;
 }
+
 label.setting-touch-indicator.pressed {
     background: radial-gradient(circle at center, red 0%, red 20%, alpha(red, .1) 60%, alpha(red, 0.) 100%);
 }
 
 /* ================================================================
- * 墨算 UI 第一阶段：Drawboard-inspired 深色讲课界面
+ * 墨写：Drawboard-inspired 深色界面
  * ================================================================ */
 #mainWindow,
 #mainWindow > *,
@@ -223,7 +218,7 @@ label.setting-touch-indicator.pressed {
     border-right: 1px solid #3a3b3f;
 }
 
-/* 收藏/快速工具栏：直接复用 Xournal++ Floating Toolbox */
+/* 收藏笔槽：五个预设作为一个紧凑的快速切换区 */
 #floatingToolbox,
 #floatingToolbox > box,
 #floatingToolbox > box toolbar,
@@ -266,6 +261,18 @@ label.setting-touch-indicator.pressed {
     background-color: #505157;
     border-color: #62646b;
     box-shadow: none;
+}
+
+/* 顶部收藏槽：保持与主工具栏一致的紧凑间距 */
+#tbTop1 toolbutton,
+#tbTop2 toolbutton {
+    -GtkWidget-focus-padding: 0;
+}
+
+#tbTop1 toolbutton:nth-child(n+1) image,
+#tbTop2 toolbutton:nth-child(n+1) image {
+    min-width: 24px;
+    min-height: 24px;
 }
 
 separator,
