@@ -13,11 +13,18 @@ jobs:
         with:
           ref: xournal-drawboard-ui
           fetch-depth: 0
-      - name: Restore
+      - name: Restore clean action files
         run: |
           git checkout f158434f9819f2f006eee6f133c95f6c765bb2a2 -- src/core/control/actions/ActionProperties.h
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/core/control/actions/ActionDatabase.cpp')
+          s = p.read_text()
+          s = s.replace('#include "FavoritePenActions.h"\n', '')
+          p.write_text(s)
+          PY
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src/core/control/actions/ActionProperties.h
-          git commit -m '[repair-actionproperties] Restore ActionProperties original'
+          git add src/core/control/actions/ActionProperties.h src/core/control/actions/ActionDatabase.cpp
+          git commit -m '[repair-actionproperties] Clean action integration'
           git push origin HEAD:xournal-drawboard-ui
