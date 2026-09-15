@@ -11,7 +11,6 @@
 #include "util/safe_casts.h"  // for to_underlying Todo(cpp20) remove
 
 #include "ActionProperties.h"
-#include "FavoritePenActions.h"
 
 #ifdef DEBUG_ACTION_DB
 #define START_ROW "   * " << std::left << std::setw(30) << std::boolalpha << Action_toString(a)
