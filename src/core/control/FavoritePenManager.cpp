@@ -32,7 +32,7 @@ void FavoritePenManager::load(Settings* settings) {
         int color = static_cast<int>(static_cast<uint32_t>(presets[i].color));
         if (slot.getInt("toolType", toolType) && slot.getInt("size", size) && slot.getInt("color", color)) {
             if ((toolType == TOOL_PEN || toolType == TOOL_HIGHLIGHTER) && size >= TOOL_SIZE_VERY_FINE &&
-                size <= TOOL_SIZE_VERY_LARGE) {
+                size <= TOOL_SIZE_VERY_THICK) {
                 presets[i].toolType = static_cast<ToolType>(toolType);
                 presets[i].size = static_cast<ToolSize>(size);
                 presets[i].color = Color{static_cast<uint32_t>(color)};
