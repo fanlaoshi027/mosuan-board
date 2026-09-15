@@ -32,7 +32,6 @@
 #include "util/i18n.h"
 
 #include "ActionDatabase.h"
-#include "FavoritePenActions.h"
 
 /**
  * Template class to store Action properties. Expected members are:
