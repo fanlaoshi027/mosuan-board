@@ -76,7 +76,7 @@ enum class Action : size_t {
     ZOOM_OUT,
     ZOOM_100,
     ZOOM_FIT,
-    ZOOM,  ///< Action whose state is the current zoom value
+    ZOOM,
 
     // Menu navigation
     GOTO_FIRST,
@@ -137,7 +137,7 @@ enum class Action : size_t {
     AUDIO_SEEK_BACKWARDS,
 
     SELECT_FONT,
-    FONT,  ///< Action whose state is the font's description
+    FONT,
     TEX,
 
     // Plugin Menu
@@ -152,8 +152,11 @@ enum class Action : size_t {
     TOOL_SIZE,
     TOOL_FILL,
     TOOL_FILL_OPACITY,
-    TOOL_COLOR,    ///< Action whose state is the current color with alpha set to 0xff (in ARGB as a uint32_t)
-    SELECT_COLOR,  ///< Pops up a color chooser dialog
+    TOOL_COLOR,
+    SELECT_COLOR,
+
+    // 墨写 favorite pen presets
+    FAVORITE_PEN,
 
     // Layer handling
     LAYER_SHOW_ALL,
@@ -169,7 +172,7 @@ enum class Action : size_t {
     LAYER_GOTO_NEXT,
     LAYER_GOTO_PREVIOUS,
     LAYER_GOTO_TOP,
-    LAYER_ACTIVE,  ///< Action whose state is the current layer index
+    LAYER_ACTIVE,
 
     // Miscellaneous
     POSITION_HIGHLIGHTING,
