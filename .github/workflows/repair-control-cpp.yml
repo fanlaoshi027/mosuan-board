@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   repair:
-    if: github.event.head_commit.id == '56fd6d1e7bd69a34df8436c8ea7cc0ae025be91f'
+    if: github.event.before == 'ddf8a753a845d48c9875b4ee23a0271397c6eff7'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
