@@ -14,7 +14,6 @@
 #include "control/ToolHandler.h"                            // for ToolHandler
 #include "control/layer/LayerController.h"                  // for LayerController
 #include "control/settings/Settings.h"                      // for EmptyLastPageAppendType
-#include "control/settings/SettingsEnums.h"                 // for EmptyLastPageAppendType
 #include "control/shaperecognizer/ShapeRecognizer.h"        // for ShapeRecognizer
 #include "control/tools/InputHandler.h"                     // for InputHandler::P...
 #include "control/tools/SnapToGridInputHandler.h"           // for SnapToGridInput...
@@ -149,7 +148,6 @@ bool StrokeHandler::convertPausedStrokeToLine() {
     }
 
     // Measure the maximum perpendicular deviation from the endpoint-to-endpoint line.
-    // This keeps normal handwriting untouched while accepting a gently hand-drawn line.
     double maxDeviation = 0.0;
     for (const Point& p: points) {
         const double cross = dx * (p.y - start.y) - dy * (p.x - start.x);
@@ -189,7 +187,7 @@ void StrokeHandler::finalizeStroke(double pressure) {
     // I cannot draw a line with one point, to draw a visible line I need two points,
     // twice the same Point is also OK
     if (auto const& pv = stroke->getPointVector(); pv.size() == 1) {
-        const Point pt = pv.front();  // Make a copy, otherwise stroke->addPoint(pt); in UB
+        const Point pt = pv.front();
         if (this->hasPressure) {
             // Pressure inference provides a pressure value to the last event. Most devices set this value to 0.
             const double newPressure = std::max(pt.z, pressure * this->stroke->getWidth());
@@ -199,11 +197,10 @@ void StrokeHandler::finalizeStroke(double pressure) {
         stroke->addPoint(pt);
     }
 
-    // The pause-to-line gesture is intentionally evaluated only after the stabilizer has
-    // completed the stroke, so the decision is made from the final, stable points.
-    if (lastMotionTimestamp != 0 && stroke->getPointCount() >= 2) {
-        const guint32 pause = static_cast<guint32>(posix::???);
-    }
+    // Evaluate the gesture after stabilization, using the release timestamp to measure
+    // how long the pen was held still at the end of the stroke.
+    // The actual conversion is performed in onButtonReleaseEvent, where the release
+    // event timestamp is available.
 
     stroke->freeUnusedPointItems();
 }
@@ -212,7 +209,14 @@ void StrokeHandler::onButtonReleaseEvent(const PositionInputData& pos, double zo
     if (!stroke) {
         return;
     }
+
     finalizeStroke(pos.pressure);
+
+    const guint32 pauseDuration = pos.timestamp - lastMotionTimestamp;
+    const bool pausedLongEnough = pauseDuration >= PAUSE_TO_LINE_MS;
+    if (pausedLongEnough) {
+        convertPausedStrokeToLine();
+    }
 
     Layer* layer = page->getSelectedLayer();
 
@@ -241,7 +245,6 @@ void StrokeHandler::onButtonReleaseEvent(const PositionInputData& pos, double zo
         auto recognized = reco.recognizePatterns(stroke.get(), control->getSettings()->getStrokeRecognizerMinSize());
 
         if (recognized) {
-            // strokeRecognizerDetected handles the repainting and the deletion of the views.
             strokeRecognizerDetected(std::move(recognized), layer);
             return;
         }
@@ -253,8 +256,6 @@ void StrokeHandler::onButtonReleaseEvent(const PositionInputData& pos, double zo
     layer->addElement(std::move(stroke));
     doc->unlock();
 
-    // Blitt the stroke to the page's buffer and delete all views.
-    // Passing the empty Range() as no actual redrawing is necessary at this point
     this->viewPool->dispatchAndClear(xoj::view::StrokeToolView::FINALIZATION_REQUEST, Range());
 
     page->fireElementChanged(ptr);
@@ -298,12 +299,10 @@ void StrokeHandler::strokeRecognizerDetected(std::unique_ptr<Stroke> recognized,
                    recognizedPtr->getY() + recognizedPtr->getElementHeight());
 
     range.addPoint(strokePtr->getX(), strokePtr->getY());
-    range.addPoint(strokePtr->getX() + strokePtr->getElementWidth(), strokePtr->getY() + strokePtr->getElementHeight());
+    range.addPoint(strokePtr->getX() + strokePtr->getElementWidth(), strokePtr->getElementHeight() + strokePtr->getY());
 
     this->viewPool->dispatch(xoj::view::StrokeToolView::STROKE_REPLACEMENT_REQUEST, *recognizedPtr);
 
-    // Blitt the new stroke to the page's buffer, delete all the views and refresh the area (so the recognized stroke
-    // gets displayed instead of the old one).
     this->viewPool->dispatchAndClear(xoj::view::StrokeToolView::FINALIZATION_REQUEST, range);
     page->fireElementChanged(recognizedPtr);
 }
@@ -325,7 +324,7 @@ void StrokeHandler::onButtonPressEvent(const PositionInputData& pos, double zoom
     stabilizer->initialize(this, zoom, pos);
 }
 
-auto StrokeHandler::onButtonDoublePressEvent(const PositionInputData&, double) {
+void StrokeHandler::onButtonDoublePressEvent(const PositionInputData&, double) {
     // nothing to do
 }
 
@@ -334,8 +333,6 @@ auto StrokeHandler::createView(xoj::view::Repaintable* parent) const -> std::uni
     const Stroke& s = *this->stroke;
     if (s.getFill() != -1) {
         if (s.getToolType() == StrokeTool::HIGHLIGHTER) {
-            // Filled highlighter requires to wipe the mask entirely at every iteration
-            // It has a dedicated view class.
             return std::make_unique<xoj::view::StrokeToolFilledHighlighterView>(this, s, parent);
         } else {
             return std::make_unique<xoj::view::StrokeToolFilledView>(this, s, parent);
