@@ -44,6 +44,35 @@ class XojFont;
 using std::vector;
 using xoj::util::Rectangle;
 
+
+class VertexEditUndoAction: public UndoAction {
+public:
+    VertexEditUndoAction(const PageRef& page, Stroke* stroke, std::vector<Point> oldPoints,
+                         std::vector<Point> newPoints):
+            UndoAction("VertexEditUndoAction"), stroke(stroke), oldPoints(std::move(oldPoints)), newPoints(std::move(newPoints)) {
+        this->page = page;
+    }
+
+    bool undo(Control* control) override { return apply(control, oldPoints); }
+    bool redo(Control* control) override { return apply(control, newPoints); }
+    std::string getText() override { return _("Edit geometry"); }
+
+private:
+    bool apply(Control* control, const std::vector<Point>& points) {
+        if (stroke == nullptr) return false;
+        auto* doc = control->getDocument();
+        doc->lock();
+        stroke->setPointVector(points);
+        doc->unlock();
+        this->page->fireRectChanged(Rectangle<double>(stroke->boundingRect()));
+        return true;
+    }
+
+    Stroke* stroke;
+    std::vector<Point> oldPoints;
+    std::vector<Point> newPoints;
+};
+
 EditSelectionContents::EditSelectionContents(Rectangle<double> bounds, Rectangle<double> snappedBounds,
                                              const PageRef& sourcePage, Layer* sourceLayer, XojPageView* sourceView):
         originalBounds(bounds),
@@ -392,6 +421,20 @@ auto EditSelectionContents::getOriginalBounds() const -> Rectangle<double> {
 
 auto EditSelectionContents::getSourceView() -> XojPageView* { return this->sourceView; }
 
+
+UndoActionPtr EditSelectionContents::createVertexEditUndo(Stroke* stroke, std::vector<Point> oldPoints) {
+    if (stroke == nullptr || oldPoints.size() != stroke->getPointCount() || oldPoints.empty()) return nullptr;
+    const auto& newPoints = stroke->getPointVector();
+    bool changed = false;
+    for (size_t i = 0; i < oldPoints.size(); ++i) {
+        if (oldPoints[i].x != newPoints[i].x || oldPoints[i].y != newPoints[i].y || oldPoints[i].z != newPoints[i].z) {
+            changed = true;
+            break;
+        }
+    }
+    if (!changed) return nullptr;
+    return std::make_unique<VertexEditUndoAction>(this->sourcePage, stroke, std::move(oldPoints), newPoints);
+}
 
 void EditSelectionContents::updateContent(Rectangle<double> bounds, Rectangle<double> snappedBounds, double rotation,
                                           bool aspectRatio, Layer* layer, const PageRef& targetPage,

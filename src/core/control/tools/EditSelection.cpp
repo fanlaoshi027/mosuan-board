@@ -537,6 +537,19 @@ auto EditSelection::rearrangeInsertionOrder(const OrderChange change) -> UndoAct
  * (should be called in the mouse-button-released event handler)
  */
 void EditSelection::mouseUp() {
+    if (this->mouseDownType == CURSOR_SELECTION_VERTEX) {
+        if (this->vertexStroke != nullptr && !this->vertexOriginalPoints.empty()) {
+            if (auto action = this->contents->createVertexEditUndo(this->vertexStroke, std::move(this->vertexOriginalPoints))) {
+                this->undo->addUndoAction(std::move(action));
+            }
+        }
+        this->vertexStroke = nullptr;
+        this->vertexIndex = -1;
+        this->mouseDownType = CURSOR_SELECTION_NONE;
+        this->view->getXournal()->repaintSelection(true);
+        return;
+    }
+
     if (this->mouseDownType == CURSOR_SELECTION_DELETE) {
         this->view->getXournal()->deleteSelection();
         return;
@@ -571,6 +584,15 @@ void EditSelection::mouseDown(CursorSelectionType type, double x, double y) {
 
     this->mouseDownType = type;
 
+    if (type == CURSOR_SELECTION_VERTEX) {
+        if (this->vertexStroke != nullptr && this->vertexIndex >= 0 &&
+            static_cast<size_t>(this->vertexIndex) < this->vertexStroke->getPointCount()) {
+            this->vertexOriginalPoints = this->vertexStroke->getPointVector();
+        } else {
+            this->mouseDownType = CURSOR_SELECTION_NONE;
+        }
+    }
+
     // coordinates relative to top left corner of snapped bounds in coordinate system which is not modified
     this->relMousePosX = x / zoom - this->snappedBounds.x;
     this->relMousePosY = y / zoom - this->snappedBounds.y;
@@ -587,6 +609,27 @@ void EditSelection::mouseDown(CursorSelectionType type, double x, double y) {
  */
 void EditSelection::mouseMove(double mouseX, double mouseY, bool alt) {
     double zoom = this->view->getXournal()->getZoom();
+
+    if (this->mouseDownType == CURSOR_SELECTION_VERTEX) {
+        if (this->vertexStroke != nullptr && this->vertexIndex >= 0 &&
+            static_cast<size_t>(this->vertexIndex) < this->vertexStroke->getPointCount()) {
+            cairo_matrix_t inv = this->cmatrix;
+            cairo_matrix_invert(&inv);
+            double px = mouseX;
+            double py = mouseY;
+            cairo_matrix_transform_point(&inv, &px, &py);
+            px /= zoom;
+            py /= zoom;
+            auto points = this->vertexStroke->getPointVector();
+            Point point = points[static_cast<size_t>(this->vertexIndex)];
+            point.x = px;
+            point.y = py;
+            points[static_cast<size_t>(this->vertexIndex)] = point;
+            this->vertexStroke->setPointVector(std::move(points));
+            this->view->getXournal()->repaintSelection(true);
+        }
+        return;
+    }
 
     if (this->mouseDownType == CURSOR_SELECTION_MOVE) {
         // compute translation (without snapping)
@@ -1037,6 +1080,25 @@ auto EditSelection::getSelectionTypeForPos(double x, double y, double zoom) -> C
 
     const int EDGE_PADDING = (this->btnWidth / 2) + 2;
     const int BORDER_PADDING = (this->btnWidth / 2);
+
+    this->vertexStroke = nullptr;
+    this->vertexIndex = -1;
+    if (isSingleGeometrySelection(this)) {
+        auto* stroke = dynamic_cast<Stroke*>(this->getElementsView().front());
+        if (stroke != nullptr) {
+            const auto& points = stroke->getPointVector();
+            const double hitRadius = std::max(7.0, static_cast<double>(this->btnWidth));
+            for (size_t i = 0; i < points.size(); ++i) {
+                const double vx = points[i].x * zoom;
+                const double vy = points[i].y * zoom;
+                if (std::hypot(x - vx, y - vy) <= hitRadius) {
+                    this->vertexStroke = stroke;
+                    this->vertexIndex = static_cast<int>(i);
+                    return CURSOR_SELECTION_VERTEX;
+                }
+            }
+        }
+    }
 
     if (x1 - EDGE_PADDING <= x && x <= x1 + EDGE_PADDING && y1 - EDGE_PADDING <= y && y <= y1 + EDGE_PADDING) {
         return CURSOR_SELECTION_TOP_LEFT;

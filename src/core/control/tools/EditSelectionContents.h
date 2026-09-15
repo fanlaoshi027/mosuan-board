@@ -22,6 +22,7 @@
 #include "model/ElementContainer.h"          // for ElementContainer
 #include "model/ElementInsertionPosition.h"  // for InsertionOrder
 #include "model/PageRef.h"                   // for PageRef
+#include "model/Point.h"                     // for Point
 #include "undo/UndoAction.h"                 // for UndoAction (ptr only)
 #include "util/Color.h"                      // for Color
 #include "util/PointerContainerView.h"       // for PointerContainerView
