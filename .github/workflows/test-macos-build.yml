@@ -39,3 +39,5 @@ jobs:
           name: 墨写-hand-feel-test
           path: mac-setup/${{ steps.package.outputs.artifact }}
           if-no-files-found: error
+
+# Build trigger after geometry vertex editing.
