@@ -1,0 +1,53 @@
+name: One-time favorite pen wiring
+
+on:
+  push:
+    branches: [xournal-drawboard-ui]
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: xournal-drawboard-ui
+          fetch-depth: 0
+
+      - name: Wire favorite pen action
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("src/core/control/actions/ActionProperties.h")
+          text = path.read_text(encoding="utf-8")
+
+          include = '#include "control/FavoritePenManager.h"\n'
+          if include not in text:
+              marker = '#include "control/AudioController.h"\n'
+              if marker not in text:
+                  raise SystemExit("AudioController include marker not found")
+              text = text.replace(marker, marker + include, 1)
+
+          marker = "/*** SPECIALIZATIONS ***/\n"
+          block = '''\n/*** 墨写 ***/\ntemplate <>\nstruct ActionProperties<Action::FAVORITE_PEN> {\n    using parameter_type = int;\n\n    static void callback(GSimpleAction*, GVariant* parameter, Control* ctrl) {\n        const int slot = g_variant_get_int32(parameter);\n        FavoritePenManager::apply(ctrl->getToolHandler(), slot);\n    }\n};\n\n'''
+          if "ActionProperties<Action::FAVORITE_PEN>" not in text:
+              if marker not in text:
+                  raise SystemExit("specialization marker not found")
+              text = text.replace(marker, marker + block, 1)
+
+          path.write_text(text, encoding="utf-8", newline="\n")
+
+          workflow = Path(".github/workflows/one-time-wire-favorite-pen.yml")
+          workflow.unlink(missing_ok=True)
+
+      - name: Commit wiring and remove one-time workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/core/control/actions/ActionProperties.h .github/workflows/one-time-wire-favorite-pen.yml
+          git diff --cached --quiet && exit 0
+          git commit -m "Wire 墨写 favorite pen action"
+          git push origin HEAD:xournal-drawboard-ui
