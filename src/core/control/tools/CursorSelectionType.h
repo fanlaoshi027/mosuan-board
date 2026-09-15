@@ -31,5 +31,7 @@ enum CursorSelectionType {
     CURSOR_SELECTION_TOP,
     CURSOR_SELECTION_BOTTOM,
     CURSOR_SELECTION_ROTATE,
+    // 墨写: draggable rotation-center handle
+    CURSOR_SELECTION_ROTATION_CENTER,
     CURSOR_SELECTION_DELETE
 };

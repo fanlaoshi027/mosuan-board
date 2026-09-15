@@ -166,6 +166,9 @@ private:
     void translateToView(XojPageView* v);
     void updateMatrix();
     void scaleShift(double fx, double fy, bool changeLeft, bool changeTop);
+    Point getRotationCenter() const;
+    Point snapRotationCenter(double x, double y) const;
+    void drawRotationCenter(cairo_t* cr, double zoom);
     void setEdgePan(bool edgePan);
     bool isEdgePanning() const;
     static bool handleEdgePan(EditSelection* self);
@@ -184,6 +187,11 @@ private:  // DATA
     double relMousePosY{};
     double relMousePosRotX{};
     double relMousePosRotY{};
+
+    // 墨写: temporary custom rotation pivot. It resets when a selection is recreated.
+    double rotationCenterX{};
+    double rotationCenterY{};
+    bool customRotationCenter = false;
 
     // 墨写: active vertex while editing a single geometry.
     Stroke* vertexStroke = nullptr;

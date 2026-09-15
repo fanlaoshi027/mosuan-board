@@ -243,6 +243,10 @@ EditSelection::EditSelection(Control* ctrl, InsertionOrder elts, const PageRef& 
                                                              this->sourceLayer, this->view);
     this->contents->replaceInsertionOrder(std::move(elts));
 
+    this->rotationCenterX = this->snappedBounds.x + this->snappedBounds.width / 2;
+    this->rotationCenterY = this->snappedBounds.y + this->snappedBounds.height / 2;
+    this->customRotationCenter = false;
+
     cairo_matrix_init_identity(&this->cmatrix);
     this->view->getXournal()->getCursor()->setRotationAngle(0);
     this->view->getXournal()->getCursor()->setMirror(false);
@@ -290,14 +294,16 @@ void EditSelection::finalizeSelection() {
         Layer* layer = page->getSelectedLayer();
         // Create an Undo action to compensate - avoids Segfault/Freeze if the user presses undo after this happened
         this->contents->updateContent(this->getRect(), this->snappedBounds, this->rotation, this->preserveAspectRatio,
-                                      layer, page, this->undo, CURSOR_SELECTION_MOVE);
+                                      layer, page, this->undo, CURSOR_SELECTION_MOVE,
+                                      this->rotationCenterX, this->rotationCenterY);
     }
 
 
     this->view = v;
 
     auto insertOrder =
-            this->contents->makeMoveEffective(this->getRect(), this->snappedBounds, this->preserveAspectRatio);
+            this->contents->makeMoveEffective(this->getRect(), this->snappedBounds, this->preserveAspectRatio,
+                                              this->rotationCenterX, this->rotationCenterY);
 
 
     auto* doc = view->getXournal()->getControl()->getDocument();
@@ -537,6 +543,15 @@ auto EditSelection::rearrangeInsertionOrder(const OrderChange change) -> UndoAct
  * (should be called in the mouse-button-released event handler)
  */
 void EditSelection::mouseUp() {
+    if (this->mouseDownType == CURSOR_SELECTION_ROTATION_CENTER) {
+        Point center = snapRotationCenter(mouseX / zoom, mouseY / zoom);
+        this->rotationCenterX = center.x;
+        this->rotationCenterY = center.y;
+        updateMatrix();
+        this->view->getXournal()->repaintSelection(true);
+        return;
+    }
+
     if (this->mouseDownType == CURSOR_SELECTION_VERTEX) {
         if (this->vertexStroke != nullptr && !this->vertexOriginalPoints.empty()) {
             if (auto action = this->contents->createVertexEditUndo(this->vertexStroke, std::move(this->vertexOriginalPoints))) {
@@ -564,7 +579,8 @@ void EditSelection::mouseUp() {
     this->sourceLayer = layer;
 
     this->contents->updateContent(this->getRect(), this->snappedBounds, this->rotation, this->preserveAspectRatio,
-                                  layer, page, this->undo, this->mouseDownType);
+                                  layer, page, this->undo, this->mouseDownType,
+                                  this->rotationCenterX, this->rotationCenterY);
 
     this->mouseDownType = CURSOR_SELECTION_NONE;
 
@@ -583,6 +599,11 @@ void EditSelection::mouseDown(CursorSelectionType type, double x, double y) {
     double zoom = this->view->getXournal()->getZoom();
 
     this->mouseDownType = type;
+
+    if (type == CURSOR_SELECTION_ROTATION_CENTER) {
+        this->customRotationCenter = true;
+        return;
+    }
 
     if (type == CURSOR_SELECTION_VERTEX) {
         if (this->vertexStroke != nullptr && this->vertexIndex >= 0 &&
@@ -671,8 +692,8 @@ void EditSelection::mouseMove(double mouseX, double mouseY, bool alt) {
             this->edgePanInhibitNext = false;
         }
     } else if (this->mouseDownType == CURSOR_SELECTION_ROTATE && supportRotation) {  // catch rotation here
-        double rdx = mouseX / zoom - this->snappedBounds.x - this->snappedBounds.width / 2;
-        double rdy = mouseY / zoom - this->snappedBounds.y - this->snappedBounds.height / 2;
+        double rdx = mouseX / zoom - this->rotationCenterX;
+        double rdy = mouseY / zoom - this->rotationCenterY;
 
         double angle = atan2(rdy, rdx);
         this->rotation = angle;
@@ -776,6 +797,12 @@ void EditSelection::mouseMove(double mouseX, double mouseY, bool alt) {
 // scales with scale factors fx and fy fixing the corner of the reduced bounding box defined by changeLeft and
 // changeTop
 void EditSelection::scaleShift(double fx, double fy, bool changeLeft, bool changeTop) {
+    const double oldX = this->snappedBounds.x;
+    const double oldY = this->snappedBounds.y;
+    const double oldW = this->snappedBounds.width;
+    const double oldH = this->snappedBounds.height;
+    const double pivotRelX = this->rotationCenterX - oldX;
+    const double pivotRelY = this->rotationCenterY - oldY;
     double dx = (changeLeft) ? this->snappedBounds.width * (1 - fx) : 0;
     double dy = (changeTop) ? this->snappedBounds.height * (1 - fy) : 0;
     this->width *= fx;
@@ -787,6 +814,16 @@ void EditSelection::scaleShift(double fx, double fy, bool changeLeft, bool chang
     this->y += dy + (this->y - this->snappedBounds.y) * (fy - 1);
     this->snappedBounds.x += dx;
     this->snappedBounds.y += dy;
+
+    if (this->customRotationCenter) {
+        const double anchorX = changeLeft ? oldX + oldW : oldX;
+        const double anchorY = changeTop ? oldY + oldH : oldY;
+        this->rotationCenterX = anchorX + (this->rotationCenterX - anchorX) * fx;
+        this->rotationCenterY = anchorY + (this->rotationCenterY - anchorY) * fy;
+    } else {
+        this->rotationCenterX = this->snappedBounds.x + this->snappedBounds.width / 2;
+        this->rotationCenterY = this->snappedBounds.y + this->snappedBounds.height / 2;
+    }
 
     // compute new rotation center
     double cx = this->snappedBounds.x + this->snappedBounds.width / 2;
@@ -886,8 +923,8 @@ auto EditSelection::isDeleting() const -> bool { return this->mouseDownType == C
 void EditSelection::updateMatrix() {
     double zoom = this->view->getXournal()->getZoom();
     // store rotation matrix for pointer use; the center of the rotation is the center of the bounding box
-    double rx = (this->snappedBounds.x + this->snappedBounds.width / 2) * zoom;
-    double ry = (this->snappedBounds.y + this->snappedBounds.height / 2) * zoom;
+    double rx = this->rotationCenterX * zoom;
+    double ry = this->rotationCenterY * zoom;
 
     cairo_matrix_init_identity(&this->cmatrix);
     cairo_matrix_translate(&this->cmatrix, rx, ry);
@@ -900,6 +937,8 @@ void EditSelection::moveSelection(double dx, double dy, bool addMoveUndo) {
     this->y += dy;
     this->snappedBounds.x += dx;
     this->snappedBounds.y += dy;
+    this->rotationCenterX += dx;
+    this->rotationCenterY += dy;
 
     updateMatrix();
 
@@ -916,7 +955,7 @@ void EditSelection::moveSelection(double dx, double dy, bool addMoveUndo) {
         }
         this->contents->updateContent(this->getRect(), this->snappedBounds, this->rotation, this->preserveAspectRatio,
                                       this->view->getPage()->getSelectedLayer(), this->view->getPage(), this->undo,
-                                      CURSOR_SELECTION_MOVE);
+                                      CURSOR_SELECTION_MOVE, this->rotationCenterX, this->rotationCenterY);
     }
 
     this->view->getXournal()->repaintSelection();
@@ -1074,6 +1113,13 @@ auto EditSelection::getSelectionTypeForPos(double x, double y, double zoom) -> C
     double xmax = std::max(x1, x2);
     double ymin = std::min(y1, y2);
     double ymax = std::max(y1, y2);
+
+    const double centerHitRadius = std::max(8.0, static_cast<double>(this->btnWidth));
+    const double centerX = this->rotationCenterX * zoom;
+    const double centerY = this->rotationCenterY * zoom;
+    if (supportRotation && std::hypot(x - centerX, y - centerY) <= centerHitRadius) {
+        return CURSOR_SELECTION_ROTATION_CENTER;
+    }
 
     cairo_matrix_transform_point(&this->cmatrix, &x, &y);
 
@@ -1264,7 +1310,58 @@ void EditSelection::paint(cairo_t* cr, double zoom) {
         drawAnchorRect(cr, x + width, y + height, zoom);
 
         drawDeleteRect(cr, std::min(x, x + width) - (DELETE_PADDING + this->btnWidth) / zoom, y, zoom);
+        if (supportRotation) {
+            drawRotationCenter(cr, zoom);
+        }
     }
+}
+
+Point EditSelection::getRotationCenter() const {
+    return Point(this->rotationCenterX, this->rotationCenterY);
+}
+
+Point EditSelection::snapRotationCenter(double px, double py) const {
+    const double threshold = 14.0 / this->view->getXournal()->getZoom();
+    Point best(px, py);
+    double bestDist = threshold;
+
+    for (const Element* element: this->getElementsView()) {
+        if (element->getType() != ELEMENT_STROKE) continue;
+        const auto* stroke = dynamic_cast<const Stroke*>(element);
+        if (stroke == nullptr) continue;
+        const auto& points = stroke->getPointVector();
+        for (const Point& p: points) {
+            const double d = std::hypot(p.x - px, p.y - py);
+            if (d < bestDist) { bestDist = d; best = p; }
+        }
+        for (size_t i = 1; i < points.size(); ++i) {
+            const Point& a = points[i - 1];
+            const Point& b = points[i];
+            const double vx = b.x - a.x;
+            const double vy = b.y - a.y;
+            const double len2 = vx * vx + vy * vy;
+            const double t = len2 > 0 ? std::clamp(((px - a.x) * vx + (py - a.y) * vy) / len2, 0.0, 1.0) : 0.0;
+            const double qx = a.x + t * vx;
+            const double qy = a.y + t * vy;
+            const double d = std::hypot(qx - px, qy - py);
+            if (d < bestDist) { bestDist = d; best = Point(qx, qy); }
+        }
+    }
+    return best;
+}
+
+void EditSelection::drawRotationCenter(cairo_t* cr, double zoom) {
+    cairo_save(cr);
+    cairo_set_line_width(cr, 1.5);
+    cairo_set_source_rgb(cr, 1, 0.65, 0);
+    const double cx = this->rotationCenterX * zoom;
+    const double cy = this->rotationCenterY * zoom;
+    cairo_arc(cr, cx, cy, std::max(5.0, this->btnWidth * 0.65), 0, 2 * M_PI);
+    cairo_stroke_preserve(cr);
+    cairo_move_to(cr, cx - 4, cy); cairo_line_to(cr, cx + 4, cy);
+    cairo_move_to(cr, cx, cy - 4); cairo_line_to(cr, cx, cy + 4);
+    cairo_stroke(cr);
+    cairo_restore(cr);
 }
 
 void EditSelection::drawAnchorRotation(cairo_t* cr, double x, double y, double zoom) {

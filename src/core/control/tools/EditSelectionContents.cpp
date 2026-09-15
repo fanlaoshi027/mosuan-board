@@ -378,7 +378,8 @@ void EditSelectionContents::deleteViewBuffer() {
 
 InsertionOrder EditSelectionContents::makeMoveEffective(const xoj::util::Rectangle<double>& bounds,
                                                         const xoj::util::Rectangle<double>& snappedBounds,
-                                                        bool preserveAspectRatio) {
+                                                        bool preserveAspectRatio, double rotationCenterX,
+                                                        double rotationCenterY) {
     double fx = bounds.width / this->originalBounds.width;
     double fy = bounds.height / this->originalBounds.height;
 
@@ -403,8 +404,7 @@ InsertionOrder EditSelectionContents::makeMoveEffective(const xoj::util::Rectang
             e->scale(bounds.x, bounds.y, fx, fy, 0, this->restoreLineWidth);
         }
         if (rotate) {
-            e->rotate(snappedBounds.x + this->lastSnappedBounds.width / 2,
-                      snappedBounds.y + this->lastSnappedBounds.height / 2, this->rotation);
+            e->rotate(rotationCenterX, rotationCenterY, this->rotation);
         }
     }
     this->selected.clear();
@@ -438,7 +438,8 @@ UndoActionPtr EditSelectionContents::createVertexEditUndo(Stroke* stroke, std::v
 
 void EditSelectionContents::updateContent(Rectangle<double> bounds, Rectangle<double> snappedBounds, double rotation,
                                           bool aspectRatio, Layer* layer, const PageRef& targetPage,
-                                          UndoRedoHandler* undo, CursorSelectionType type) {
+                                          UndoRedoHandler* undo, CursorSelectionType type,
+                                          double rotationCenterX, double rotationCenterY) {
     double mx = snappedBounds.x - this->lastSnappedBounds.x;
     double my = snappedBounds.y - this->lastSnappedBounds.y;
     bool move = mx != 0 || my != 0;
@@ -463,8 +464,8 @@ void EditSelectionContents::updateContent(Rectangle<double> bounds, Rectangle<do
                                                              my, layer, targetPage));
     } else if (type == CURSOR_SELECTION_ROTATE && rotate) {
         undo->addUndoAction(std::make_unique<RotateUndoAction>(
-                this->sourcePage, &this->selected, snappedBounds.x + snappedBounds.width / 2,
-                snappedBounds.y + snappedBounds.height / 2, rotation - this->lastRotation));
+                this->sourcePage, &this->selected, rotationCenterX, rotationCenterY,
+                rotation - this->lastRotation));
         this->rotation = 0;             // reset rotation for next usage
         this->lastRotation = rotation;  // undo one rotation at a time.
     }
