@@ -65,6 +65,21 @@ auto StrokeHandler::onMotionNotifyEvent(const PositionInputData& pos, double zoo
         return true;
     }
 
+    // If the pen has remained down and nearly still for a moment, switch to a
+    // live straight-line adjustment mode. The next motion changes only the
+    // endpoint; lifting the pen commits the current two-point line.
+    const guint32 pauseDuration = pos.timestamp - lastMotionTimestamp;
+    if (!pausedLineMode && pauseDuration >= PAUSE_TO_LINE_MS) {
+        pausedLineMode = convertPausedStrokeToLine();
+    }
+
+    if (pausedLineMode) {
+        updatePausedLine(Point(pos.x / zoom, pos.y / zoom,
+                               hasPressure ? pos.pressure * stroke->getWidth() : Point::NO_PRESSURE));
+        lastMotionTimestamp = pos.timestamp;
+        return true;
+    }
+
     lastMotionTimestamp = pos.timestamp;
     stabilizer->processEvent(pos);
     return true;
@@ -172,6 +187,26 @@ bool StrokeHandler::convertPausedStrokeToLine() {
     return true;
 }
 
+void StrokeHandler::updatePausedLine(Point point) {
+    if (!stroke || stroke->getPointCount() < 2) {
+        return;
+    }
+
+    const auto& points = stroke->getPointVector();
+    const Point start = points.front();
+    std::vector<Point> linePoints;
+    linePoints.reserve(2);
+    if (hasPressure) {
+        linePoints.emplace_back(start.x, start.y, start.z);
+        linePoints.emplace_back(point.x, point.y, point.z);
+    } else {
+        linePoints.emplace_back(start.x, start.y);
+        linePoints.emplace_back(point.x, point.y);
+    }
+    stroke->setPointVector(std::move(linePoints));
+    viewPool->dispatch(xoj::view::StrokeToolView::STROKE_REPLACEMENT_REQUEST, *stroke);
+}
+
 void StrokeHandler::finalizeStroke(double pressure) {
     if (!stroke) {
         return;
@@ -212,11 +247,15 @@ void StrokeHandler::onButtonReleaseEvent(const PositionInputData& pos, double zo
 
     finalizeStroke(pos.pressure);
 
-    const guint32 pauseDuration = pos.timestamp - lastMotionTimestamp;
-    const bool pausedLongEnough = pauseDuration >= PAUSE_TO_LINE_MS;
-    if (pausedLongEnough) {
-        convertPausedStrokeToLine();
+    // pausedLineMode already keeps the final endpoint live while the pen is down.
+    // For a release without a live adjustment, retain the existing fallback conversion.
+    if (!pausedLineMode) {
+        const guint32 pauseDuration = pos.timestamp - lastMotionTimestamp;
+        if (pauseDuration >= PAUSE_TO_LINE_MS) {
+            convertPausedStrokeToLine();
+        }
     }
+    pausedLineMode = false;
 
     Layer* layer = page->getSelectedLayer();
 
@@ -314,6 +353,7 @@ void StrokeHandler::onButtonPressEvent(const PositionInputData& pos, double zoom
     this->buttonDownPoint.y = pos.y / zoom;
 
     stroke = createStroke(this->control);
+    pausedLineMode = false;
     lastMotionTimestamp = pos.timestamp;
 
     this->hasPressure = this->stroke->getToolType().isPressureSensitive() && pos.pressure != Point::NO_PRESSURE;
