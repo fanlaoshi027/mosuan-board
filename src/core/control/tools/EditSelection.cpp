@@ -335,7 +335,8 @@ void EditSelection::finalizeSelection() {
 }
 
 auto EditSelection::makeMoveEffective() -> InsertionOrder {
-    return contents->makeMoveEffective(this->getRect(), this->snappedBounds, this->preserveAspectRatio);
+    return contents->makeMoveEffective(this->getRect(), this->snappedBounds, this->preserveAspectRatio,
+                                      this->rotationCenterX, this->rotationCenterY);
 }
 
 
@@ -544,9 +545,7 @@ auto EditSelection::rearrangeInsertionOrder(const OrderChange change) -> UndoAct
  */
 void EditSelection::mouseUp() {
     if (this->mouseDownType == CURSOR_SELECTION_ROTATION_CENTER) {
-        Point center = snapRotationCenter(mouseX / zoom, mouseY / zoom);
-        this->rotationCenterX = center.x;
-        this->rotationCenterY = center.y;
+        this->mouseDownType = CURSOR_SELECTION_NONE;
         updateMatrix();
         this->view->getXournal()->repaintSelection(true);
         return;
@@ -801,8 +800,6 @@ void EditSelection::scaleShift(double fx, double fy, bool changeLeft, bool chang
     const double oldY = this->snappedBounds.y;
     const double oldW = this->snappedBounds.width;
     const double oldH = this->snappedBounds.height;
-    const double pivotRelX = this->rotationCenterX - oldX;
-    const double pivotRelY = this->rotationCenterY - oldY;
     double dx = (changeLeft) ? this->snappedBounds.width * (1 - fx) : 0;
     double dy = (changeTop) ? this->snappedBounds.height * (1 - fy) : 0;
     this->width *= fx;
@@ -1130,7 +1127,7 @@ auto EditSelection::getSelectionTypeForPos(double x, double y, double zoom) -> C
     this->vertexStroke = nullptr;
     this->vertexIndex = -1;
     if (isSingleGeometrySelection(this)) {
-        auto* stroke = dynamic_cast<Stroke*>(this->getElementsView().front());
+        auto* stroke = const_cast<Stroke*>(dynamic_cast<const Stroke*>(this->getElementsView().front()));
         if (stroke != nullptr) {
             const auto& points = stroke->getPointVector();
             const double hitRadius = std::max(7.0, static_cast<double>(this->btnWidth));

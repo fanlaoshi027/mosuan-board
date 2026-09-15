@@ -9,7 +9,8 @@
 
 #include <glib.h>  // for g_idle_add, g_sourc...
 
-#include "control/Control.h"                      // for Control
+#include "control/Control.h"
+#include "model/Document.h"                      // for Control
 #include "control/settings/Settings.h"            // for Settings
 #include "control/tools/CursorSelectionType.h"    // for CURSOR_SELECTION_TO...
 #include "gui/PageView.h"                         // for XojPageView
@@ -31,7 +32,8 @@
 #include "undo/ScaleUndoAction.h"                 // for ScaleUndoAction
 #include "undo/SizeUndoAction.h"                  // for SizeUndoAction
 #include "undo/UndoRedoHandler.h"                 // for UndoRedoHandler
-#include "util/Assert.h"                          // for xoj_assert
+#include "util/Assert.h"
+#include "util/i18n.h"                          // for xoj_assert
 #include "util/glib_casts.h"                      // for wrap_v
 #include "util/safe_casts.h"                      // for as_signed
 #include "util/serializing/ObjectInputStream.h"   // for ObjectInputStream
@@ -64,7 +66,8 @@ private:
         doc->lock();
         stroke->setPointVector(points);
         doc->unlock();
-        this->page->fireRectChanged(Rectangle<double>(stroke->boundingRect()));
+        auto rect = Rectangle<double>(stroke->boundingRect());
+        this->page->fireRectChanged(rect);
         return true;
     }
 
