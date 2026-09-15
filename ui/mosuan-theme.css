@@ -1,0 +1,107 @@
+/* 墨算第一阶段 UI 主题：Drawboard-inspired 深色讲课界面 */
+
+#mainWindow,
+#mainWindow > *,
+#mainOverlay,
+#mainBox,
+#mainContainerBox,
+#mainContentContainer,
+#boxContents {
+    background: #202124;
+    color: #f1f3f4;
+}
+
+#tbTop1,
+#tbTop2,
+#tbLeft1,
+#tbLeft2,
+#tbRight1,
+#tbRight2 {
+    background: #292a2d;
+    border: 0;
+    padding: 4px;
+}
+
+#tbTop1,
+#tbTop2 {
+    min-height: 48px;
+}
+
+#tbTop1 toolbutton,
+#tbTop2 toolbutton,
+#tbLeft1 toolbutton,
+#tbLeft2 toolbutton,
+#tbRight1 toolbutton,
+#tbRight2 toolbutton {
+    min-width: 40px;
+    min-height: 40px;
+    margin: 2px;
+    border-radius: 8px;
+}
+
+#tbTop1 toolbutton:hover,
+#tbTop2 toolbutton:hover,
+#tbLeft1 toolbutton:hover,
+#tbLeft2 toolbutton:hover,
+#tbRight1 toolbutton:hover,
+#tbRight2 toolbutton:hover {
+    background: #3a3b3f;
+}
+
+#tbTop1 toolbutton:checked,
+#tbTop2 toolbutton:checked,
+#tbLeft1 toolbutton:checked,
+#tbLeft2 toolbutton:checked,
+#tbRight1 toolbutton:checked,
+#tbRight2 toolbutton:checked {
+    background: #4a4b50;
+}
+
+#sidebar {
+    background: #292a2d;
+    border-right: 1px solid #3a3b3f;
+}
+
+#floatingToolbox {
+    background: rgba(38, 39, 42, 0.96);
+    border: 1px solid #45464b;
+    border-radius: 14px;
+    padding: 4px;
+}
+
+#floatingvbox {
+    background: transparent;
+    border-radius: 14px;
+}
+
+#floatingvbox .tbCss {
+    background: transparent;
+    border: 0;
+    padding: 2px;
+}
+
+#floatingvbox toolbutton {
+    min-width: 42px;
+    min-height: 42px;
+    margin: 2px;
+    border-radius: 9px;
+}
+
+#floatingvbox toolbutton:hover {
+    background: #3a3b3f;
+}
+
+#floatingvbox toolbutton:checked {
+    background: #505157;
+}
+
+separator,
+.spacer {
+    background: #343539;
+}
+
+scrollbar slider {
+    min-width: 8px;
+    min-height: 8px;
+    border-radius: 4px;
+}
