@@ -2,7 +2,8 @@ name: Patch geometry vertex editing
 
 on:
   push:
-    branches: [xournal-drawboard-ui]
+    branches:
+      - xournal-drawboard-ui
     paths:
       - '.github/workflows/patch-vertex-edit.yml'
 
@@ -18,209 +19,69 @@ jobs:
           ref: xournal-drawboard-ui
           fetch-depth: 0
 
-      - name: Patch vertex editing
-        shell: python
+      - name: Patch source
         run: |
+          python3 <<'PY'
           from pathlib import Path
+          import subprocess
 
           root = Path('.')
 
-          # Point is used by the new public vertex-edit undo API.
+          # Header dependency.
           p = root / 'src/core/control/tools/EditSelectionContents.h'
           s = p.read_text()
           if '#include "model/Point.h"' not in s:
-              s = s.replace('#include "model/PageRef.h"                   // for PageRef\n',
-                            '#include "model/PageRef.h"                   // for PageRef\n#include "model/Point.h"                     // for Point\n')
+              s = s.replace(
+                  '#include "model/PageRef.h"                   // for PageRef\n',
+                  '#include "model/PageRef.h"                   // for PageRef\n#include "model/Point.h"                     // for Point\n',
+                  1)
               p.write_text(s)
 
-          # Keep the custom vertex undo implementation local to the existing selection model.
+          # Local undo action and selection-content API implementation.
           p = root / 'src/core/control/tools/EditSelectionContents.cpp'
           s = p.read_text()
           if 'class VertexEditUndoAction' not in s:
               marker = 'using xoj::util::Rectangle;\n'
-              insert = r'''
-
-class VertexEditUndoAction: public UndoAction {
-public:
-    VertexEditUndoAction(const PageRef& page, Stroke* stroke, std::vector<Point> oldPoints,
-                         std::vector<Point> newPoints):
-            UndoAction("VertexEditUndoAction"), stroke(stroke), oldPoints(std::move(oldPoints)), newPoints(std::move(newPoints)) {
-        this->page = page;
-    }
-
-    bool undo(Control* control) override {
-        return apply(control, oldPoints);
-    }
-
-    bool redo(Control* control) override {
-        return apply(control, newPoints);
-    }
-
-    std::string getText() override {
-        return _("Edit geometry");
-    }
-
-private:
-    bool apply(Control* control, const std::vector<Point>& points) {
-        if (stroke == nullptr) {
-            return false;
-        }
-        auto* doc = control->getDocument();
-        doc->lock();
-        stroke->setPointVector(points);
-        doc->unlock();
-        this->page->fireRectChanged(Rectangle<double>(stroke->boundingRect()));
-        return true;
-    }
-
-    Stroke* stroke;
-    std::vector<Point> oldPoints;
-    std::vector<Point> newPoints;
-};
-'''
+              insert = '''\n\nclass VertexEditUndoAction: public UndoAction {\npublic:\n    VertexEditUndoAction(const PageRef& page, Stroke* stroke, std::vector<Point> oldPoints,\n                         std::vector<Point> newPoints):\n            UndoAction("VertexEditUndoAction"), stroke(stroke), oldPoints(std::move(oldPoints)), newPoints(std::move(newPoints)) {\n        this->page = page;\n    }\n\n    bool undo(Control* control) override { return apply(control, oldPoints); }\n    bool redo(Control* control) override { return apply(control, newPoints); }\n    std::string getText() override { return _("Edit geometry"); }\n\nprivate:\n    bool apply(Control* control, const std::vector<Point>& points) {\n        if (stroke == nullptr) return false;\n        auto* doc = control->getDocument();\n        doc->lock();\n        stroke->setPointVector(points);\n        doc->unlock();\n        this->page->fireRectChanged(Rectangle<double>(stroke->boundingRect()));\n        return true;\n    }\n\n    Stroke* stroke;\n    std::vector<Point> oldPoints;\n    std::vector<Point> newPoints;\n};\n'''
               assert marker in s
               s = s.replace(marker, marker + insert, 1)
 
-          method_marker = 'void EditSelectionContents::updateContent(Rectangle<double> bounds, Rectangle<double> snappedBounds, double rotation,\n'
+          marker = 'void EditSelectionContents::updateContent(Rectangle<double> bounds, Rectangle<double> snappedBounds, double rotation,\n'
           if 'UndoActionPtr EditSelectionContents::createVertexEditUndo' not in s:
-              method = r'''UndoActionPtr EditSelectionContents::createVertexEditUndo(Stroke* stroke, std::vector<Point> oldPoints) {
-    if (stroke == nullptr || oldPoints.size() != stroke->getPointCount() || oldPoints.empty()) {
-        return nullptr;
-    }
-
-    const auto& newPoints = stroke->getPointVector();
-    bool changed = false;
-    for (size_t i = 0; i < oldPoints.size(); ++i) {
-        if (oldPoints[i].x != newPoints[i].x || oldPoints[i].y != newPoints[i].y || oldPoints[i].z != newPoints[i].z) {
-            changed = true;
-            break;
-        }
-    }
-    if (!changed) {
-        return nullptr;
-    }
-
-    return std::make_unique<VertexEditUndoAction>(this->sourcePage, stroke, std::move(oldPoints), newPoints);
-}
-
-'''
-              assert method_marker in s
-              s = s.replace(method_marker, method + method_marker, 1)
+              method = '''UndoActionPtr EditSelectionContents::createVertexEditUndo(Stroke* stroke, std::vector<Point> oldPoints) {\n    if (stroke == nullptr || oldPoints.size() != stroke->getPointCount() || oldPoints.empty()) return nullptr;\n    const auto& newPoints = stroke->getPointVector();\n    bool changed = false;\n    for (size_t i = 0; i < oldPoints.size(); ++i) {\n        if (oldPoints[i].x != newPoints[i].x || oldPoints[i].y != newPoints[i].y || oldPoints[i].z != newPoints[i].z) {\n            changed = true;\n            break;\n        }\n    }\n    if (!changed) return nullptr;\n    return std::make_unique<VertexEditUndoAction>(this->sourcePage, stroke, std::move(oldPoints), newPoints);\n}\n\n'''
+              assert marker in s
+              s = s.replace(marker, method + marker, 1)
           p.write_text(s)
 
-          # Add independent vertex-edit state and interaction to EditSelection.
+          # Selection interaction.
           p = root / 'src/core/control/tools/EditSelection.cpp'
           s = p.read_text()
 
-          mouseup_old = '''void EditSelection::mouseUp() {
-    if (this->mouseDownType == CURSOR_SELECTION_DELETE) {
-'''
-          mouseup_new = '''void EditSelection::mouseUp() {
-    if (this->mouseDownType == CURSOR_SELECTION_VERTEX) {
-        if (this->vertexStroke != nullptr && !this->vertexOriginalPoints.empty()) {
-            if (auto action = this->contents->createVertexEditUndo(this->vertexStroke, std::move(this->vertexOriginalPoints))) {
-                this->undo->addUndoAction(std::move(action));
-            }
-        }
-        this->vertexStroke = nullptr;
-        this->vertexIndex = -1;
-        this->mouseDownType = CURSOR_SELECTION_NONE;
-        this->view->getXournal()->repaintSelection(true);
-        return;
-    }
+          old = '''void EditSelection::mouseUp() {\n    if (this->mouseDownType == CURSOR_SELECTION_DELETE) {\n'''
+          new = '''void EditSelection::mouseUp() {\n    if (this->mouseDownType == CURSOR_SELECTION_VERTEX) {\n        if (this->vertexStroke != nullptr && !this->vertexOriginalPoints.empty()) {\n            if (auto action = this->contents->createVertexEditUndo(this->vertexStroke, std::move(this->vertexOriginalPoints))) {\n                this->undo->addUndoAction(std::move(action));\n            }\n        }\n        this->vertexStroke = nullptr;\n        this->vertexIndex = -1;\n        this->mouseDownType = CURSOR_SELECTION_NONE;\n        this->view->getXournal()->repaintSelection(true);\n        return;\n    }\n\n    if (this->mouseDownType == CURSOR_SELECTION_DELETE) {\n'''
+          assert old in s
+          s = s.replace(old, new, 1)
 
-    if (this->mouseDownType == CURSOR_SELECTION_DELETE) {
-'''
-          assert mouseup_old in s
-          s = s.replace(mouseup_old, mouseup_new, 1)
+          old = '''    this->mouseDownType = type;\n\n    // coordinates relative to top left corner of snapped bounds in coordinate system which is not modified\n'''
+          new = '''    this->mouseDownType = type;\n\n    if (type == CURSOR_SELECTION_VERTEX) {\n        if (this->vertexStroke != nullptr && this->vertexIndex >= 0 &&\n            static_cast<size_t>(this->vertexIndex) < this->vertexStroke->getPointCount()) {\n            this->vertexOriginalPoints = this->vertexStroke->getPointVector();\n        } else {\n            this->mouseDownType = CURSOR_SELECTION_NONE;\n        }\n    }\n\n    // coordinates relative to top left corner of snapped bounds in coordinate system which is not modified\n'''
+          assert old in s
+          s = s.replace(old, new, 1)
 
-          mousedown_old = '''    this->mouseDownType = type;
+          old = '''    if (this->mouseDownType == CURSOR_SELECTION_MOVE) {\n'''
+          new = '''    if (this->mouseDownType == CURSOR_SELECTION_VERTEX) {\n        if (this->vertexStroke != nullptr && this->vertexIndex >= 0 &&\n            static_cast<size_t>(this->vertexIndex) < this->vertexStroke->getPointCount()) {\n            cairo_matrix_t inv = this->cmatrix;\n            cairo_matrix_invert(&inv);\n            double px = mouseX;\n            double py = mouseY;\n            cairo_matrix_transform_point(&inv, &px, &py);\n            px /= zoom;\n            py /= zoom;\n            auto points = this->vertexStroke->getPointVector();\n            Point point = points[static_cast<size_t>(this->vertexIndex)];\n            point.x = px;\n            point.y = py;\n            points[static_cast<size_t>(this->vertexIndex)] = point;\n            this->vertexStroke->setPointVector(std::move(points));\n            this->view->getXournal()->repaintSelection(true);\n        }\n        return;\n    }\n\n    if (this->mouseDownType == CURSOR_SELECTION_MOVE) {\n'''
+          assert old in s
+          s = s.replace(old, new, 1)
 
-    // coordinates relative to top left corner of snapped bounds in coordinate system which is not modified
-'''
-          mousedown_new = '''    this->mouseDownType = type;
-
-    if (type == CURSOR_SELECTION_VERTEX) {
-        if (this->vertexStroke != nullptr && this->vertexIndex >= 0 &&
-            static_cast<size_t>(this->vertexIndex) < this->vertexStroke->getPointCount()) {
-            this->vertexOriginalPoints = this->vertexStroke->getPointVector();
-        } else {
-            this->mouseDownType = CURSOR_SELECTION_NONE;
-        }
-    }
-
-    // coordinates relative to top left corner of snapped bounds in coordinate system which is not modified
-'''
-          assert mousedown_old in s
-          s = s.replace(mousedown_old, mousedown_new, 1)
-
-          mousemove_old = '''    if (this->mouseDownType == CURSOR_SELECTION_MOVE) {
-'''
-          mousemove_new = '''    if (this->mouseDownType == CURSOR_SELECTION_VERTEX) {
-        if (this->vertexStroke != nullptr && this->vertexIndex >= 0 &&
-            static_cast<size_t>(this->vertexIndex) < this->vertexStroke->getPointCount()) {
-            cairo_matrix_t inv = this->cmatrix;
-            cairo_matrix_invert(&inv);
-            double px = mouseX;
-            double py = mouseY;
-            cairo_matrix_transform_point(&inv, &px, &py);
-            px /= zoom;
-            py /= zoom;
-
-            auto points = this->vertexStroke->getPointVector();
-            Point point = points[static_cast<size_t>(this->vertexIndex)];
-            point.x = px;
-            point.y = py;
-            points[static_cast<size_t>(this->vertexIndex)] = point;
-            this->vertexStroke->setPointVector(std::move(points));
-            this->view->getXournal()->repaintSelection(true);
-        }
-        return;
-    }
-
-    if (this->mouseDownType == CURSOR_SELECTION_MOVE) {
-'''
-          assert mousemove_old in s
-          s = s.replace(mousemove_old, mousemove_new, 1)
-
-          # Hit-test geometry vertices before the regular bounding-box handles.
-          hit_marker = '''    const int EDGE_PADDING = (this->btnWidth / 2) + 2;
-    const int BORDER_PADDING = (this->btnWidth / 2);
-
-'''
-          hit_code = '''    const int EDGE_PADDING = (this->btnWidth / 2) + 2;
-    const int BORDER_PADDING = (this->btnWidth / 2);
-
-    this->vertexStroke = nullptr;
-    this->vertexIndex = -1;
-    if (isSingleGeometrySelection(this)) {
-        auto* stroke = dynamic_cast<Stroke*>(this->getElementsView().front());
-        if (stroke != nullptr) {
-            const auto& points = stroke->getPointVector();
-            const double hitRadius = std::max(7.0, static_cast<double>(this->btnWidth));
-            for (size_t i = 0; i < points.size(); ++i) {
-                const double vx = points[i].x * zoom;
-                const double vy = points[i].y * zoom;
-                if (std::hypot(x - vx, y - vy) <= hitRadius) {
-                    this->vertexStroke = stroke;
-                    this->vertexIndex = static_cast<int>(i);
-                    return CURSOR_SELECTION_VERTEX;
-                }
-            }
-        }
-    }
-
-'''
-          assert hit_marker in s
-          s = s.replace(hit_marker, hit_code, 1)
-
+          old = '''    const int EDGE_PADDING = (this->btnWidth / 2) + 2;\n    const int BORDER_PADDING = (this->btnWidth / 2);\n\n'''
+          new = '''    const int EDGE_PADDING = (this->btnWidth / 2) + 2;\n    const int BORDER_PADDING = (this->btnWidth / 2);\n\n    this->vertexStroke = nullptr;\n    this->vertexIndex = -1;\n    if (isSingleGeometrySelection(this)) {\n        auto* stroke = dynamic_cast<Stroke*>(this->getElementsView().front());\n        if (stroke != nullptr) {\n            const auto& points = stroke->getPointVector();\n            const double hitRadius = std::max(7.0, static_cast<double>(this->btnWidth));\n            for (size_t i = 0; i < points.size(); ++i) {\n                const double vx = points[i].x * zoom;\n                const double vy = points[i].y * zoom;\n                if (std::hypot(x - vx, y - vy) <= hitRadius) {\n                    this->vertexStroke = stroke;\n                    this->vertexIndex = static_cast<int>(i);\n                    return CURSOR_SELECTION_VERTEX;\n                }\n            }\n        }\n    }\n\n'''
+          assert old in s
+          s = s.replace(old, new, 1)
           p.write_text(s)
 
-          # Avoid leaving a one-shot repair workflow in the branch after it has patched the tree.
-          p = root / '.github/workflows/patch-vertex-edit.yml'
-          p.unlink()
+          # Remove the one-shot workflow before committing the actual source change.
+          wf = root / '.github/workflows/patch-vertex-edit.yml'
+          wf.unlink()
 
-          import subprocess
           subprocess.run(['git', 'config', 'user.name', 'github-actions[bot]'], check=True)
           subprocess.run(['git', 'config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com'], check=True)
           subprocess.run(['git', 'add', 'src/core/control/tools/CursorSelectionType.h',
@@ -230,3 +91,4 @@ private:
                           'src/core/control/tools/EditSelection.cpp'], check=True)
           subprocess.run(['git', 'commit', '-m', 'Implement draggable geometry vertices'], check=True)
           subprocess.run(['git', 'push', 'origin', 'xournal-drawboard-ui'], check=True)
+          PY
