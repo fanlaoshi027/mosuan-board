@@ -17,65 +17,44 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
-          def replace(path, old, new, count=1):
-              p = Path(path)
-              s = p.read_text()
-              if old not in s:
-                  raise SystemExit(f'pattern not found in {path}: {old!r}')
-              p.write_text(s.replace(old, new, count))
+          p = Path('src/core/control/tools/EditSelection.cpp')
+          s = p.read_text()
+          s2 = s.replace(
+              'return contents->makeMoveEffective(this->getRect(), this->snappedBounds, this->preserveAspectRatio);',
+              'return contents->makeMoveEffective(this->getRect(), this->snappedBounds, this->preserveAspectRatio,\\n                                      this->rotationCenterX, this->rotationCenterY);',
+              1)
+          if s2 == s:
+              raise SystemExit('makeMoveEffective call was not found')
+          s = s2
 
-          replace('src/core/control/tools/EditSelection.cpp',
-              '''InsertionOrder EditSelection::makeMoveEffective() -> InsertionOrder {
-              return contents->makeMoveEffective(this->getRect(), this->snappedBounds, this->preserveAspectRatio);
-          }''',
-              '''InsertionOrder EditSelection::makeMoveEffective() -> InsertionOrder {
-              return contents->makeMoveEffective(this->getRect(), this->snappedBounds, this->preserveAspectRatio,
-                                                this->rotationCenterX, this->rotationCenterY);
-          }''')
+          s = re.sub(
+              r'void EditSelection::mouseUp\(\) \{\n    if \(this->mouseDownType == CURSOR_SELECTION_ROTATION_CENTER\) \{.*?\n        return;\n    \}',
+              '''void EditSelection::mouseUp() {\n    if (this->mouseDownType == CURSOR_SELECTION_ROTATION_CENTER) {\n        this->mouseDownType = CURSOR_SELECTION_NONE;\n        updateMatrix();\n        this->view->getXournal()->repaintSelection(true);\n        return;\n    }''',
+              s, count=1, flags=re.S)
 
-          replace('src/core/control/tools/EditSelection.cpp',
-              '''void EditSelection::mouseUp() {
-              if (this->mouseDownType == CURSOR_SELECTION_ROTATION_CENTER) {
-                  Point center = snapRotationCenter(mouseX / zoom, mouseY / zoom);
-                  this->rotationCenterX = center.x;
-                  this->rotationCenterY = center.y;
-                  updateMatrix();
-                  this->view->getXournal()->repaintSelection(true);
-                  return;
-              }''',
-              '''void EditSelection::mouseUp() {
-              if (this->mouseDownType == CURSOR_SELECTION_ROTATION_CENTER) {
-                  this->mouseDownType = CURSOR_SELECTION_NONE;
-                  updateMatrix();
-                  this->view->getXournal()->repaintSelection(true);
-                  return;
-              }''')
+          s = s.replace(
+              'auto* stroke = dynamic_cast<Stroke*>(this->getElementsView().front());',
+              'auto* stroke = const_cast<Stroke*>(dynamic_cast<const Stroke*>(this->getElementsView().front()));',
+              1)
 
-          replace('src/core/control/tools/EditSelection.cpp',
-              '''        auto* stroke = dynamic_cast<Stroke*>(this->getElementsView().front());''',
-              '''        auto* stroke = const_cast<Stroke*>(dynamic_cast<const Stroke*>(this->getElementsView().front()));''')
+          s = re.sub(
+              r'    const double pivotRelX = this->rotationCenterX - oldX;\n    const double pivotRelY = this->rotationCenterY - oldY;\n',
+              '', s, count=1)
+          p.write_text(s)
 
-          replace('src/core/control/tools/EditSelection.cpp',
-              '''    const double pivotRelX = this->rotationCenterX - oldX;
-              const double pivotRelY = this->rotationCenterY - oldY;
-              double dx''',
-              '''    double dx''')
-
-          replace('src/core/control/tools/EditSelectionContents.cpp',
-              '''#include "control/Control.h"                      // for Control''',
-              '''#include "control/Control.h"                      // for Control
-          #include "model/Document.h"                    // for Document''')
-
-          replace('src/core/control/tools/EditSelectionContents.cpp',
-              '''#include "util/Assert.h"                          // for xoj_assert''',
-              '''#include "util/Assert.h"                          // for xoj_assert
-          #include "util/i18n.h"                          // for _''')
-
-          replace('src/core/control/tools/EditSelectionContents.cpp',
-              '''        this->page->fireRectChanged(Rectangle<double>(stroke->boundingRect()));''',
-              '''        auto rect = Rectangle<double>(stroke->boundingRect());
-                  this->page->fireRectChanged(rect);''')
+          p = Path('src/core/control/tools/EditSelectionContents.cpp')
+          s = p.read_text()
+          if '#include "model/Document.h"' not in s:
+              s = s.replace('#include "control/Control.h"                      // for Control', '#include "control/Control.h"                      // for Control\n#include "model/Document.h"                    // for Document', 1)
+          if '#include "util/i18n.h"' not in s:
+              s = s.replace('#include "util/Assert.h"                          // for xoj_assert', '#include "util/Assert.h"                          // for xoj_assert\n#include "util/i18n.h"                          // for _', 1)
+          s = s.replace(
+              'this->page->fireRectChanged(Rectangle<double>(stroke->boundingRect()));',
+              'auto rect = Rectangle<double>(stroke->boundingRect());\n        this->page->fireRectChanged(rect);',
+              1)
+          p.write_text(s)
           PY
       - name: Install dependencies
         run: |
