@@ -1,0 +1,58 @@
+name: Repair 墨写 build v2
+
+on:
+  push:
+    branches: [xournal-drawboard-ui]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: ${{ !contains(github.event.head_commit.message, 'Repair 墨写 build v2 commit') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Repair source
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/core/control/tools/EditSelection.cpp')
+          s = p.read_text()
+          s = s.replace('preserveAspectRatio,\\\\n                                      this->rotationCenterX', 'preserveAspectRatio,\n                                      this->rotationCenterX')
+          s = s.replace('preserveAspectRatio,\\n                                      this->rotationCenterX', 'preserveAspectRatio,\n                                      this->rotationCenterX')
+          s = s.replace('return contents->makeMoveEffective(this->getRect(), this->snappedBounds, this->preserveAspectRatio);', 'return contents->makeMoveEffective(this->getRect(), this->snappedBounds, this->preserveAspectRatio,\n                                      this->rotationCenterX, this->rotationCenterY);', 1)
+          s = s.replace('auto* stroke = dynamic_cast<Stroke*>(this->getElementsView().front());', 'auto* stroke = const_cast<Stroke*>(dynamic_cast<const Stroke*>(this->getElementsView().front()));', 1)
+          s = s.replace('    const double pivotRelX = this->rotationCenterX - oldX;\n    const double pivotRelY = this->rotationCenterY - oldY;\n', '', 1)
+          start = 'void EditSelection::mouseUp() {\n    if (this->mouseDownType == CURSOR_SELECTION_ROTATION_CENTER) {'
+          if start in s:
+              a = s.index(start)
+              b = s.index('\n    }', a) + len('\n    }')
+              s = s[:a] + '''void EditSelection::mouseUp() {\n    if (this->mouseDownType == CURSOR_SELECTION_ROTATION_CENTER) {\n        this->mouseDownType = CURSOR_SELECTION_NONE;\n        updateMatrix();\n        this->view->getXournal()->repaintSelection(true);\n        return;\n    }''' + s[b:]
+          p.write_text(s)
+
+          p = Path('src/core/control/tools/EditSelectionContents.cpp')
+          s = p.read_text()
+          if '#include "model/Document.h"' not in s:
+              s = s.replace('#include "control/Control.h"', '#include "control/Control.h"\n#include "model/Document.h"', 1)
+          if '#include "util/i18n.h"' not in s:
+              s = s.replace('#include "util/Assert.h"', '#include "util/Assert.h"\n#include "util/i18n.h"', 1)
+          s = s.replace('this->page->fireRectChanged(Rectangle<double>(stroke->boundingRect()));', 'auto rect = Rectangle<double>(stroke->boundingRect());\n        this->page->fireRectChanged(rect);', 1)
+          p.write_text(s)
+          PY
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y librsvg2-dev gcc g++ cmake ninja-build libgtk-3-dev libpoppler-glib-dev portaudio19-dev libsndfile1-dev liblua5.3-dev libzip-dev gettext help2man libgtest-dev libgtksourceview-4-dev libqpdf-dev
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --parallel 2
+      - name: Commit repaired source
+        if: success()
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/core/control/tools/EditSelection.cpp src/core/control/tools/EditSelectionContents.cpp
+          git commit -m 'Repair 墨写 build v2 commit' || true
+          git push origin xournal-drawboard-ui
