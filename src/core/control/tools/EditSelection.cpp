@@ -26,6 +26,7 @@
 #include "model/Layer.h"                          // for Layer
 #include "model/LineStyle.h"                      // for LineStyle
 #include "model/Point.h"                          // for Point
+#include "model/Stroke.h"                         // for Stroke
 #include "model/XojPage.h"                        // for XojPage
 #include "undo/ArrangeUndoAction.h"               // for ArrangeUndoAction
 #include "undo/InsertUndoAction.h"                // for InsertsUndoAction
@@ -53,6 +54,16 @@ constexpr int ROTATE_PADDING = 8;
 
 /// Number of times to trigger edge pan timer per second
 constexpr unsigned int PAN_TIMER_RATE = 30;
+
+static bool isSingleGeometrySelection(const EditSelection* selection) {
+    const auto elements = selection->getElementsView();
+    if (elements.size() != 1) return false;
+    const Element* element = elements.front();
+    if (element->getType() != ELEMENT_STROKE) return false;
+    const auto* stroke = dynamic_cast<const Stroke*>(element);
+    return stroke != nullptr && stroke->getPointCount() >= 2 && stroke->getPointCount() <= 8;
+}
+
 
 namespace SelectionFactory {
 /// @return Bounds and SnappingBounds
@@ -1124,21 +1135,45 @@ void EditSelection::paint(cairo_t* cr, double zoom) {
     Util::cairo_set_dash_from_vector(cr, dashes, 0);
     gdk_cairo_set_source_rgba(cr, &selectionColor);
 
-    cairo_rectangle(cr, std::min(x, x + width) * zoom, std::min(y, y + height) * zoom, std::abs(width) * zoom,
-                    std::abs(height) * zoom);
+    const bool singleGeometry = isSingleGeometrySelection(this);
+    if (!singleGeometry) {
+        cairo_rectangle(cr, std::min(x, x + width) * zoom, std::min(y, y + height) * zoom, std::abs(width) * zoom,
+                        std::abs(height) * zoom);
+    }
 
     // for debugging
     // cairo_rectangle(cr, snappedBounds.x * zoom, snappedBounds.y * zoom, snappedBounds.width * zoom,
     // snappedBounds.height * zoom);
 
-    cairo_stroke_preserve(cr);
-    auto applied = GdkRGBA{selectionColor.red, selectionColor.green, selectionColor.blue, 0.3};
-    gdk_cairo_set_source_rgba(cr, &applied);
-    cairo_fill(cr);
+    if (!singleGeometry) {
+        cairo_stroke_preserve(cr);
+        auto applied = GdkRGBA{selectionColor.red, selectionColor.green, selectionColor.blue, 0.3};
+        gdk_cairo_set_source_rgba(cr, &applied);
+        cairo_fill(cr);
+    }
 
     ToolHandler* toolHandler = view->getXournal()->getControl()->getToolHandler();
     if (toolHandler->getToolType() != TOOL_HAND) {
         cairo_set_dash(cr, nullptr, 0, 0);
+        if (singleGeometry) {
+            const auto* stroke = dynamic_cast<const Stroke*>(getElementsView().front());
+            const auto& points = stroke->getPointVector();
+            const double cx = (snappedBounds.x + snappedBounds.width / 2) * zoom;
+            const double cy = (snappedBounds.y + snappedBounds.height / 2) * zoom;
+            cairo_save(cr);
+            cairo_translate(cr, cx, cy);
+            cairo_rotate(cr, this->rotation);
+            cairo_translate(cr, -cx, -cy);
+            for (const auto& point: points) {
+                gdk_cairo_set_source_rgba(cr, &selectionColor);
+                cairo_arc(cr, point.x * zoom, point.y * zoom, std::max(4.0, this->btnWidth * 0.55), 0, 2 * M_PI);
+                cairo_fill_preserve(cr);
+                cairo_set_source_rgb(cr, 1, 1, 1);
+                cairo_set_line_width(cr, 1.5);
+                cairo_stroke(cr);
+            }
+            cairo_restore(cr);
+        }
         if (!this->preserveAspectRatio) {
             // top
             drawAnchorRect(cr, x + width / 2, y, zoom);
