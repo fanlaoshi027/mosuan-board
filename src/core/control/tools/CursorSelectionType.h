@@ -16,6 +16,9 @@ enum CursorSelectionType {
     // Inside the selection
     CURSOR_SELECTION_MOVE = 1,
 
+    // Geometry vertex editing
+    CURSOR_SELECTION_VERTEX,
+
     // Edges
     CURSOR_SELECTION_TOP_LEFT,
     CURSOR_SELECTION_TOP_RIGHT,
