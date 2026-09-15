@@ -9,6 +9,7 @@
 #include "control/ToolEnums.h"
 #include "util/Color.h"
 
+class Settings;
 class ToolHandler;
 
 auto constexpr FAVORITE_PEN_COUNT = 5;
@@ -21,12 +22,12 @@ struct FavoritePenPreset {
 
 class FavoritePenManager {
 public:
-    static void apply(ToolHandler* toolHandler, int slot);
-    static void capture(ToolHandler* toolHandler, int slot);
+    static void apply(ToolHandler* toolHandler, Settings* settings, int slot);
+    static void capture(ToolHandler* toolHandler, Settings* settings, int slot);
     static const FavoritePenPreset& get(int slot);
 
 private:
-    static void initialize();
+    static void initialize(Settings* settings = nullptr);
     static std::array<FavoritePenPreset, FAVORITE_PEN_COUNT> presets;
     static bool initialized;
 };
