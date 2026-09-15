@@ -1,0 +1,15 @@
+name: Build 墨写 macOS Test DMG (Manual)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  macos:
+    name: Build 墨写 macOS test DMG
+    uses: ./.github/workflows/make-installer-macos.yml
+    with:
+      runner: macos-14
+      displayed_name: 墨写测试版
+      head_sha: ${{ github.sha }}
+      build_type: RelWithDebInfo
+      artifact_version_suffix: -mosuan-test
