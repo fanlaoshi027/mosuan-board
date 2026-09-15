@@ -7,6 +7,7 @@
 #include <type_traits>
 
 #include "control/AudioController.h"
+#include "control/FavoritePenManager.h"
 #include "control/Control.h"
 #include "control/ScrollHandler.h"
 #include "control/ToolEnums.h"
@@ -71,6 +72,18 @@ struct has_state<a, std::void_t<typename ActionProperties<a>::state_type>>: std:
 
 
 /*** SPECIALIZATIONS ***/
+
+/*** 墨写 ***/
+template <>
+struct ActionProperties<Action::FAVORITE_PEN> {
+    using parameter_type = int;
+
+    static void callback(GSimpleAction*, GVariant* parameter, Control* ctrl) {
+        const int slot = g_variant_get_int32(parameter);
+        FavoritePenManager::apply(ctrl->getToolHandler(), slot);
+    }
+};
+
 
 /** File Menu **/
 template <>
