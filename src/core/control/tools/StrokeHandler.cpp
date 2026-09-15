@@ -3,7 +3,7 @@
 #include <algorithm>  // for max, min
 #include <cmath>      // for ceil, pow, abs
 #include <limits>     // for numeric_limits
-#include <memory>     // for unique_ptr, mak...
+#include <memory>     // for unique_ptr, make_unique
 #include <utility>    // for move
 #include <vector>     // for vector
 
@@ -13,7 +13,7 @@
 #include "control/ToolEnums.h"                              // for DRAWING_TYPE_ST...
 #include "control/ToolHandler.h"                            // for ToolHandler
 #include "control/layer/LayerController.h"                  // for LayerController
-#include "control/settings/Settings.h"                      // for Settings
+#include "control/settings/Settings.h"                      // for EmptyLastPageAppendType
 #include "control/settings/SettingsEnums.h"                 // for EmptyLastPageAppendType
 #include "control/shaperecognizer/ShapeRecognizer.h"        // for ShapeRecognizer
 #include "control/tools/InputHandler.h"                     // for InputHandler::P...
@@ -27,7 +27,7 @@
 #include "model/XojPage.h"                                  // for XojPage
 #include "undo/InsertUndoAction.h"                          // for InsertUndoAction
 #include "undo/RecognizerUndoAction.h"                      // for RecognizerUndoA...
-#include "undo/UndoRedoHandler.h"                           // for UndoRedoHandler
+#include "undo/UndoRedoHandler.h"                            // for UndoRedoHandler
 #include "util/Assert.h"                                    // for xoj_assert
 #include "util/DispatchPool.h"                              // for DispatchPool
 #include "util/Range.h"                                     // for Range
@@ -66,6 +66,7 @@ auto StrokeHandler::onMotionNotifyEvent(const PositionInputData& pos, double zoo
         return true;
     }
 
+    lastMotionTimestamp = pos.timestamp;
     stabilizer->processEvent(pos);
     return true;
 }
@@ -93,7 +94,7 @@ void StrokeHandler::paintTo(Point point) {
              * Both device and tool are pressure sensitive
              */
             if (const double widthDelta = point.z - endPoint.z;
-                - widthDelta > MAX_WIDTH_VARIATION || widthDelta > MAX_WIDTH_VARIATION) {
+                -widthDelta > MAX_WIDTH_VARIATION || widthDelta > MAX_WIDTH_VARIATION) {
                 /**
                  * If the width variation is to big, decompose into shorter segments.
                  * Those segments can not be shorter than PIXEL_MOTION_THRESHOLD
@@ -118,7 +119,6 @@ void StrokeHandler::paintTo(Point point) {
 }
 
 void StrokeHandler::drawSegmentTo(const Point& point) {
-
     this->stroke->addPoint(this->hasPressure ? point : Point(point.x, point.y));
     this->viewPool->dispatch(xoj::view::StrokeToolView::ADD_POINT_REQUEST, this->stroke->getPointVector().back());
     return;
@@ -130,6 +130,48 @@ void StrokeHandler::onSequenceCancelEvent() {
                                          Range(this->stroke->boundingRect()));
         stroke.reset();
     }
+}
+
+bool StrokeHandler::convertPausedStrokeToLine() {
+    if (!stroke || stroke->getToolType() != StrokeTool::PEN || stroke->getPointCount() < 2) {
+        return false;
+    }
+
+    const auto& points = stroke->getPointVector();
+    const Point start = points.front();
+    const Point end = points.back();
+    const double dx = end.x - start.x;
+    const double dy = end.y - start.y;
+    const double length = std::hypot(dx, dy);
+
+    if (length < PAUSE_TO_LINE_MIN_LENGTH) {
+        return false;
+    }
+
+    // Measure the maximum perpendicular deviation from the endpoint-to-endpoint line.
+    // This keeps normal handwriting untouched while accepting a gently hand-drawn line.
+    double maxDeviation = 0.0;
+    for (const Point& p: points) {
+        const double cross = dx * (p.y - start.y) - dy * (p.x - start.x);
+        maxDeviation = std::max(maxDeviation, std::abs(cross) / length);
+    }
+
+    if (maxDeviation / length > PAUSE_TO_LINE_MAX_DEVIATION) {
+        return false;
+    }
+
+    std::vector<Point> linePoints;
+    linePoints.reserve(2);
+    if (hasPressure) {
+        linePoints.emplace_back(start.x, start.y, start.z);
+        linePoints.emplace_back(end.x, end.y, end.z);
+    } else {
+        linePoints.emplace_back(start.x, start.y);
+        linePoints.emplace_back(end.x, end.y);
+    }
+
+    stroke->setPointVector(std::move(linePoints));
+    return true;
 }
 
 void StrokeHandler::finalizeStroke(double pressure) {
@@ -155,6 +197,12 @@ void StrokeHandler::finalizeStroke(double pressure) {
             this->viewPool->dispatch(xoj::view::StrokeToolView::THICKEN_FIRST_POINT_REQUEST, newPressure);
         }
         stroke->addPoint(pt);
+    }
+
+    // The pause-to-line gesture is intentionally evaluated only after the stabilizer has
+    // completed the stroke, so the decision is made from the final, stable points.
+    if (lastMotionTimestamp != 0 && stroke->getPointCount() >= 2) {
+        const guint32 pause = static_cast<guint32>(posix::???);
     }
 
     stroke->freeUnusedPointItems();
@@ -267,6 +315,7 @@ void StrokeHandler::onButtonPressEvent(const PositionInputData& pos, double zoom
     this->buttonDownPoint.y = pos.y / zoom;
 
     stroke = createStroke(this->control);
+    lastMotionTimestamp = pos.timestamp;
 
     this->hasPressure = this->stroke->getToolType().isPressureSensitive() && pos.pressure != Point::NO_PRESSURE;
 
@@ -276,7 +325,7 @@ void StrokeHandler::onButtonPressEvent(const PositionInputData& pos, double zoom
     stabilizer->initialize(this, zoom, pos);
 }
 
-void StrokeHandler::onButtonDoublePressEvent(const PositionInputData&, double) {
+auto StrokeHandler::onButtonDoublePressEvent(const PositionInputData&, double) {
     // nothing to do
 }
 
