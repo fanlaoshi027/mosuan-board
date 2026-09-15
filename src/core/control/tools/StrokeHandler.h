@@ -91,6 +91,9 @@ protected:
     /// Converts a nearly straight stroke to a two-point line when the user pauses before lifting the pen.
     bool convertPausedStrokeToLine();
 
+    /// Updates the live endpoint while the paused line gesture is being adjusted.
+    void updatePausedLine(Point point);
+
 protected:
     Point buttonDownPoint;  // used for tapSelect and filtering - never snapped to grid.
     SnapToGridInputHandler snappingHandler;
@@ -107,6 +110,9 @@ private:
 
     // Timestamp of the most recent motion event, in milliseconds.
     guint32 lastMotionTimestamp = 0;
+
+    // Once a near-straight stroke has paused, keep only its start and live endpoint.
+    bool pausedLineMode = false;
 
     friend class StrokeStabilizer::Active;
 
