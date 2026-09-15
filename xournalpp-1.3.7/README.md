@@ -1,4 +1,3 @@
-
 # Xournal++
 
 [![Build Status](https://dev.azure.com/xournalpp/xournalpp/_apis/build/status/CI?branchName=master)](https://dev.azure.com/xournalpp/xournalpp/_build/latest?definitionId=1&branchName=master)
@@ -62,7 +61,6 @@ You can still check out the [separate repository on GitLab](https://gitlab.com/T
 <table>
 <tr>
 <td>
-
 
 ## GNU/Linux
 
@@ -180,7 +178,6 @@ sudo apt install xournalpp
 ```
 
 #### Stable PPA
-
 The latest stable version is available via the following [_unofficial_ PPA](https://github.com/xournalpp/xournalpp/issues/1013#issuecomment-692656810):
 
 ```sh
@@ -190,7 +187,6 @@ sudo apt install xournalpp
 ```
 
 #### Unstable PPA
-
 An _unstable_, nightly release is available for Ubuntu-based distributions via the following PPA:
 
 ```sh
@@ -259,7 +255,6 @@ sudo eopkg it xournalpp
 ### Chrome OS
 
 You can [enable the linux container](https://support.google.com/chromebook/answer/9145439?hl=en), and install the [Debian package](https://github.com/xournalpp/xournalpp?tab=readme-ov-file#debian) from the official Debian repositories.
-
 ```sh
 sudo apt install xournalpp
 ```
