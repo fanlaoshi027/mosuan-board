@@ -1,0 +1,41 @@
+name: 墨写 macOS hand feel test
+
+on:
+  push:
+    branches: [xournal-drawboard-ui]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    if: github.event.head_commit.message != 'Remove temporary macOS hand feel test workflow'
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install dependencies
+        uses: ./.github/actions/install_deps_mac
+        with:
+          install_path: $HOME
+      - name: Build 墨写
+        uses: ./.github/actions/build
+        with:
+          build_type: RelWithDebInfo
+          cmake_flags: >-
+            -DCMAKE_INSTALL_PREFIX="$HOME/gtk/inst"
+      - name: Create app and DMG
+        id: package
+        shell: bash
+        run: |
+          (cd build && cmake --build . --target install)
+          (cd mac-setup && ./build-app.sh $HOME/gtk)
+          export VERSION=$(cat build/VERSION | sed '1q;d')
+          export OUTPUT="moxie-handfeel-${VERSION}-macOS-${{runner.arch}}.dmg"
+          (cd mac-setup && ./build-dmg.sh Xournal++.app "$OUTPUT")
+          echo "artifact=$OUTPUT" >> "$GITHUB_OUTPUT"
+      - name: Upload DMG
+        uses: actions/upload-artifact@v6
+        with:
+          name: 墨写-hand-feel-test
+          path: mac-setup/${{ steps.package.outputs.artifact }}
+          if-no-files-found: error
